@@ -1,8 +1,7 @@
 import os
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 # --- Конфигурация ---
 # Токен бота будет получен из переменной окружения, которую мы создадим на Railway
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
