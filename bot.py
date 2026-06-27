@@ -9,7 +9,7 @@ if not TOKEN:
 
 # ССЫЛКИ
 ARTICLE_URL = "https://teletype.in/@mariamrouze/formula"
-PREORDER_URL = "https://..."  # замените на вашу ссылку на форму предзаписи
+PREORDER_URL = "https://forms.gle/7AAixb78UeSALr4c9"  # замените на вашу ссылку на форму предзаписи
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # УСИЛЕННЫЙ ТЕКСТ ПРИВЕТСТВИЯ
