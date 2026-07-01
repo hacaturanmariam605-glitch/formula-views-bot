@@ -9,17 +9,18 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 
-# --- Переменные окружения ---
+# --- Переменные окружения (читаем из Railway) ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
 
 PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-на-форму")
-COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставьте новую ссылку
+ARTICLE_URL = os.environ.get("ARTICLE_URL", "https://teletype.in/@mariamrouze/formula")
+COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставляем ссылку на фото
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза (без изменений) ---
+# --- Вопросы квиза (финальные, с сокращёнными ответами) ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
@@ -113,7 +114,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"<b>Привет, {first_name}!</b>\n"
         "Держи статью — <b>«Формула просмотров»</b>:\n"
-        "https://teletype.in/@mariamrouze/formula\n\n"
+        f"{ARTICLE_URL}\n\n"
         "Внутри — информация, которую часто продают на платных курсах. "
         "Читай, сохраняй и сразу применяй.\n"
         "👇 А после прочтения жми на кнопку — я дам тебе задание, "
