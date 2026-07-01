@@ -4,7 +4,7 @@ import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
@@ -18,46 +18,64 @@ PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-н�
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза (без изменений) ---
+# --- Вопросы квиза (финальные, с единым стилем) ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
         "options": {
             "А": "Чем популярнее, тем больше просмотров",
-            "Б": "Привлечь аудиторию, отталкиваясь от ценностей",
+            "Б": "Привлечь аудиторию по ценностям",
             "В": "Стать заметным для брендов"
         },
-        "correct": "Б"
+        "correct": "Б",
+        "explanation": (
+            "Выбор известной личности — это не просто про охваты, а про вашу аудиторию. "
+            "Важно, чтобы её ценности совпадали с вашими, так вы привлекаете качественную аудиторию."
+        )
     },
     {
         "question": "Можно ли комбинировать несколько формул в одном ролике?",
         "options": {
             "А": "Нет, они конфликтуют",
-            "Б": "Да, можно усиливать эффект",
+            "Б": "Да, это усиливает эффект",
             "В": "Да, но не больше двух"
         },
-        "correct": "Б"
+        "correct": "Б",
+        "explanation": (
+            "Да, использование нескольких формул делает ролик сильнее. "
+            "Например, «ты + лайфхак + известная личность» будут удерживать и вовлекать зрителя эффективнее."
+        )
     },
     {
         "question": "Почему формула «ты + актуальная тема» работает для новичков?",
         "options": {
             "А": "Алгоритмы продвигают новые аккаунты",
-            "Б": "Если блогер ещё неизвестный, но тема актуальна — это задерживает внимание",
+            "Б": "Актуальная тема сама цепляет внимание",
             "В": "Низкие затраты на производство"
         },
-        "correct": "Б"
+        "correct": "Б",
+        "explanation": (
+            "Актуальная тема сама по себе цепляет внимание, даже если вы новый блогер. "
+            "Людям интересно мнение по животрепещущему вопросу, а не ваша популярность."
+        )
     },
     {
-        "question": "Что важнее: один вирусный ролик или дисциплина?",
+        "question": "Что важнее: вирусный ролик или дисциплина?",
         "options": {
-            "А": "Вирусный ролик — так как это охваты",
-            "Б": "Дисциплина — так как просмотры не так важны",
-            "В": "И дисциплина, и вирусные ролики, у каждого своя задача"
+            "А": "Вирусный ролик — это охваты",
+            "Б": "Дисциплина — стабильный рост",
+            "В": "Оба важны, у каждого своя задача"
         },
-        "correct": "В"
+        "correct": "В",
+        "explanation": (
+            "Вирусный ролик даёт быстрый всплеск, а дисциплина — стабильный рост. "
+            "Я советую сочетать: системно работать над контентом и время от времени создавать "
+            "потенциально вирусные видео. У каждого ролика своя задача."
+        )
     }
 ]
-# --- Функция для сохранения в Google Sheets (без изменений) ---
+
+# --- Функция сохранения в Google Sheets ---
 def save_to_google_sheets(user_data, answers, score):
     try:
         if not GOOGLE_CREDENTIALS_JSON:
@@ -92,8 +110,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     first_name = user.first_name or "друг"
     text = (
-        f"Привет, {first_name}!\n"
-        "Держи статью — «Формула просмотров»:\n"
+        f"<b>Привет, {first_name}!</b>\n"
+        "Держи статью — <b>«Формула просмотров»</b>:\n"
         "https://teletype.in/@mariamrouze/formula\n\n"
         "Внутри — информация, которую часто продают на платных курсах. "
         "Читай, сохраняй и сразу применяй.\n"
@@ -101,16 +119,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "которое поможет внедрить формулы уже сегодня."
     )
     keyboard = [[InlineKeyboardButton("✅ Я прочитал(а) статью", callback_data="read_article")]]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "read_article":
-        # Инициализируем состояние
         context.user_data["question_index"] = 0
         context.user_data["answers"] = {}
-        # Отправляем первый вопрос НОВЫМ сообщением
         await send_question(update, context)
 
 async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,41 +135,46 @@ async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await finish_quiz(update, context)
         return
     q = QUESTIONS[idx]
-    text = f"❓ Вопрос {idx+1} из {len(QUESTIONS)}:\n{q['question']}\n\n"
-    # Кнопки для вариантов ответа
-    keyboard = []
+    text = f"<b>✨ Вопрос {idx+1} из {len(QUESTIONS)}</b>\n\n"
+    text += f"{q['question']}\n\n"
     for key, value in q["options"].items():
-        keyboard.append([InlineKeyboardButton(f"{key}) {value}", callback_data=f"ans_{key}")])
+        text += f"<b>{key}</b>) {value}\n"
+    keyboard = [[InlineKeyboardButton(key, callback_data=f"ans_{key}") for key in q["options"].keys()]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    # Если это первый вопрос, вызываем update.callback_query для ответа на кнопку "Прочитал"
-    # В этом месте мы можем отправить новое сообщение через query.message.reply_text или через update.effective_chat.send_message
     if update.callback_query:
-        await update.callback_query.message.reply_text(text, reply_markup=reply_markup)
+        await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
     else:
-        await update.message.reply_text(text, reply_markup=reply_markup)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
 
 async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_answer = query.data.split("_")[1]  # "ans_Б" -> "Б"
+    user_answer = query.data.split("_")[1]
     idx = context.user_data.get("question_index", 0)
     if idx >= len(QUESTIONS):
         return
 
-    # Сохраняем ответ
     context.user_data["answers"][idx] = user_answer
 
-    # Проверяем
-    correct = QUESTIONS[idx]["correct"]
+    q = QUESTIONS[idx]
+    correct = q["correct"]
+    explanation = q["explanation"]
+
     if user_answer == correct:
-        reply = "✅ Верно!"
+        reply = (
+            f"🤍 <b>Верно!</b> Правильный ответ: <b>{correct}) {q['options'][correct]}</b>\n\n"
+            f"📖 {explanation}"
+        )
     else:
-        reply = f"❌ Не совсем. Правильный ответ: {correct}"
+        user_text = q["options"].get(user_answer, "")
+        reply = (
+            f"💭 <b>Не совсем.</b> Твой ответ: <b>{user_answer}) {user_text}</b>\n"
+            f"🤍 <b>Правильный ответ: {correct}) {q['options'][correct]}</b>\n\n"
+            f"📖 {explanation}"
+        )
 
-    # Отправляем результат
-    await query.message.reply_text(reply)
+    await query.message.reply_text(reply, parse_mode='HTML')
 
-    # Переходим к следующему вопросу
     context.user_data["question_index"] = idx + 1
     if context.user_data["question_index"] >= len(QUESTIONS):
         await finish_quiz(update, context)
@@ -161,7 +182,7 @@ async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_question(update, context)
 
 async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Подсчёт баллов
+    # Подсчёт баллов (сохраняем в Google Sheets)
     answers = context.user_data.get("answers", {})
     score = 0
     for i, q in enumerate(QUESTIONS):
@@ -169,7 +190,6 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
             score += 1
     total = len(QUESTIONS)
 
-    # Сохраняем в Google Sheets
     user = update.effective_user
     user_data = {
         "id": user.id,
@@ -178,28 +198,16 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_to_google_sheets(user_data, answers, score)
 
-    # Итоговое сообщение
-    if score == total:
-        stars = "🌟 Отлично! Ты настоящий эксперт!"
-    elif score >= total - 1:
-        stars = "🔥 Очень хорошо! Почти всё правильно!"
-    elif score >= total // 2:
-        stars = "👍 Неплохо! Есть куда расти."
-    else:
-        stars = "📖 Стоит перечитать статью внимательнее."
-
+    # Финальное сообщение (без результата, только ваш текст)
     final_text = (
-        f"🎯 Ты набрал(а) {score} из {total}!\n"
-        f"{stars}\n\n"
-        "Если хочешь разобрать формулы глубже и получить готовую систему под свой блог — "
-        "оставь заявку на мини-курс «OH MY BRAND»:\n"
+        "Если хочешь системно вести блог с пониманием, сотрудничать с брендами и понимать, "
+        "какой формат контента для чего — оставь заявку на мини-курс <b>«OH MY BRAND»</b>:\n"
         f"{PREORDER_URL}\n\n"
-        "Цена для участников квиза — 5 500 ₽ (вместо 10 000).\n"
+        "Заполняй анкету презаписи, чтобы сохранить за собой цену — <b>5 500 ₽</b> (вместо 10 000).\n"
         "Анкета ни к чему не обязывает."
     )
-    await update.effective_chat.send_message(final_text)
+    await update.effective_chat.send_message(final_text, parse_mode='HTML')
 
-    # Очищаем состояние
     context.user_data.clear()
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
