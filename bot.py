@@ -18,7 +18,7 @@ PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-н�
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза (финальные, с единым стилем) ---
+# --- Вопросы квиза ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
@@ -75,7 +75,7 @@ QUESTIONS = [
     }
 ]
 
-# --- Функция сохранения в Google Sheets ---
+# --- Сохранение в Google Sheets ---
 def save_to_google_sheets(user_data, answers, score):
     try:
         if not GOOGLE_CREDENTIALS_JSON:
@@ -161,17 +161,9 @@ async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     explanation = q["explanation"]
 
     if user_answer == correct:
-        reply = (
-            f"🤍 <b>Верно!</b> Правильный ответ: <b>{correct}) {q['options'][correct]}</b>\n\n"
-            f"📖 {explanation}"
-        )
+        reply = f"🤍 <b>Верно!</b>\n\n📖 {explanation}"
     else:
-        user_text = q["options"].get(user_answer, "")
-        reply = (
-            f"💭 <b>Не совсем.</b> Твой ответ: <b>{user_answer}) {user_text}</b>\n"
-            f"🤍 <b>Правильный ответ: {correct}) {q['options'][correct]}</b>\n\n"
-            f"📖 {explanation}"
-        )
+        reply = f"💭 <b>Не совсем.</b>\n\n📖 {explanation}"
 
     await query.message.reply_text(reply, parse_mode='HTML')
 
@@ -182,7 +174,6 @@ async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_question(update, context)
 
 async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Подсчёт баллов (сохраняем в Google Sheets)
     answers = context.user_data.get("answers", {})
     score = 0
     for i, q in enumerate(QUESTIONS):
@@ -198,15 +189,25 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_to_google_sheets(user_data, answers, score)
 
-    # Финальное сообщение (без результата, только ваш текст)
+    # Похвала
+    if score == total:
+        praise = "✨ Ты супер! Все ответы верны!"
+    elif score >= total - 1:
+        praise = "✨ Отлично! Почти всё правильно!"
+    elif score >= total // 2:
+        praise = "✨ Неплохо! Есть куда расти."
+    else:
+        praise = "📖 Стоит перечитать статью внимательнее."
+
     final_text = (
+        f"{praise}\n\n"
         "Если хочешь системно вести блог с пониманием, сотрудничать с брендами и понимать, "
-        "какой формат контента для чего — оставь заявку на мини-курс <b>«OH MY BRAND»</b>:\n"
-        f"{PREORDER_URL}\n\n"
-        "Заполняй анкету презаписи, чтобы сохранить за собой цену — <b>5 500 ₽</b> (вместо 10 000).\n"
-        "Анкета ни к чему не обязывает."
+        "какой формат контента для чего — оставь заявку на мини-курс <b>«OH MY BRAND»</b>:"
     )
-    await update.effective_chat.send_message(final_text, parse_mode='HTML')
+    # Кнопка с ссылкой на предзапись
+    keyboard = [[InlineKeyboardButton("📝 Предзапись на курс", url=PREORDER_URL)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.effective_chat.send_message(final_text, reply_markup=reply_markup, parse_mode='HTML')
 
     context.user_data.clear()
 
