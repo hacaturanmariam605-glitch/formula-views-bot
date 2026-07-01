@@ -9,18 +9,18 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 
-# --- Переменные окружения (читаем из Railway) ---
+# --- Переменные окружения ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
 
 PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-на-форму")
 ARTICLE_URL = os.environ.get("ARTICLE_URL", "https://teletype.in/@mariamrouze/formula")
-COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставляем ссылку на фото
+COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза (финальные, с сокращёнными ответами) ---
+# --- Вопросы квиза ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
@@ -113,20 +113,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name or "друг"
     text = (
         f"<b>Привет, {first_name}!</b>\n"
-        "Держи статью — <b>«Формула просмотров»</b>:\n"
-        f"{ARTICLE_URL}\n\n"
-        "Внутри — информация, которую часто продают на платных курсах. "
-        "Читай, сохраняй и сразу применяй.\n"
-        "👇 А после прочтения жми на кнопку — я дам тебе задание, "
-        "которое поможет внедрить формулы уже сегодня."
+        "Здесь ты найдёшь 5 формул просмотров — читай статью, а затем возвращайся, чтобы проверить себя.\n"
+        "Внутри — информация, которую часто продают на платных курсах. Читай, сохраняй и сразу применяй."
     )
-    keyboard = [[InlineKeyboardButton("✅ Я прочитал(а) статью", callback_data="read_article")]]
+    keyboard = [
+        [InlineKeyboardButton("📖 Читать статью", url=ARTICLE_URL)],
+        [InlineKeyboardButton("🧠 Пройти тест", callback_data="start_quiz")]
+    ]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data == "read_article":
+    if query.data == "start_quiz":
         context.user_data["question_index"] = 0
         context.user_data["answers"] = {}
         await send_question(update, context)
@@ -191,7 +190,6 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_to_google_sheets(user_data, answers, score)
 
-    # Единая похвала для всех
     praise = "Отличная работа, ты молодец! Теперь ты знаешь 5 формул, которые можешь применять в своих роликах."
 
     caption = (
@@ -228,7 +226,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^read_article$"))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^start_quiz$"))
     app.add_handler(CallbackQueryHandler(answer_callback, pattern="^ans_"))
     logging.info("Бот запущен и слушает сообщения...")
     app.run_polling()
