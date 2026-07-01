@@ -9,17 +9,17 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 
-# --- Переменные окружения (читаем из Railway) ---
+# --- Переменные окружения ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
 
 PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-на-форму")
-COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставляем ссылку на фото
+COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставьте новую ссылку
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза (финальные, с сокращёнными ответами) ---
+# --- Вопросы квиза (без изменений) ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
@@ -190,17 +190,9 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_to_google_sheets(user_data, answers, score)
 
-    # Похвала
-    if score == total:
-        praise = "✨ Ты супер! Все ответы верны!"
-    elif score >= total - 1:
-        praise = "✨ Отлично! Почти всё правильно!"
-    elif score >= total // 2:
-        praise = "✨ Неплохо! Есть куда расти."
-    else:
-        praise = "📖 Стоит перечитать статью внимательнее."
+    # Единая похвала для всех
+    praise = "Отличная работа, ты молодец! Теперь ты знаешь 5 формул, которые можешь применять в своих роликах."
 
-    # Текст подписи к фото (без прямой ссылки в тексте)
     caption = (
         f"{praise}\n\n"
         "Если хочешь системно вести блог с пониманием, сотрудничать с брендами и понимать, "
@@ -209,11 +201,9 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Анкета ни к чему не обязывает."
     )
 
-    # Кнопка предзаписи
     keyboard = [[InlineKeyboardButton("📝 Предзапись на курс", url=PREORDER_URL)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Отправляем фото, если переменная задана, иначе — только текст
     if COURSE_IMAGE_URL:
         await update.effective_chat.send_photo(
             photo=COURSE_IMAGE_URL,
