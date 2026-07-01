@@ -15,10 +15,10 @@ if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
 
 PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-на-форму")
-GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")  # содержимое json-файла сервисного аккаунта
+GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза ---
+# --- Вопросы квиза (без изменений) ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность для коллаборации?",
@@ -72,7 +72,7 @@ QUESTIONS = [
     }
 ]
 
-# --- Функция для сохранения в Google Sheets ---
+# --- Функция для сохранения в Google Sheets (без изменений) ---
 def save_to_google_sheets(user_data, answers, score):
     try:
         if not GOOGLE_CREDENTIALS_JSON:
@@ -82,18 +82,13 @@ def save_to_google_sheets(user_data, answers, score):
         creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # Открываем или создаём таблицу
         try:
             sheet = client.open(GOOGLE_SHEET_NAME).sheet1
         except gspread.SpreadsheetNotFound:
             sheet = client.create(GOOGLE_SHEET_NAME).sheet1
-            # Даём доступ редактору (можно добавить свой email)
-            # sheet.add_editor('ваш-email@gmail.com')  # раскомментируйте, если нужно
-        # Если таблица пуста, добавляем заголовки
         if not sheet.get_all_records():
             headers = ["Дата", "User ID", "Имя", "Username", "Балл"] + [f"Вопрос {i+1}" for i in range(len(QUESTIONS))]
             sheet.append_row(headers)
-        # Формируем строку для записи
         from datetime import datetime
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -127,37 +122,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "read_article":
-        # Инициализируем состояние пользователя
+        # Инициализируем состояние
         context.user_data["question_index"] = 0
         context.user_data["answers"] = {}
+        # Отправляем первый вопрос НОВЫМ сообщением
         await send_question(update, context)
 
 async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     idx = context.user_data.get("question_index", 0)
     if idx >= len(QUESTIONS):
-        # Квиз завершён
         await finish_quiz(update, context)
         return
     q = QUESTIONS[idx]
     text = f"❓ Вопрос {idx+1} из {len(QUESTIONS)}:\n{q['question']}\n\n"
+    # Кнопки для вариантов ответа
+    keyboard = []
     for key, value in q["options"].items():
-        text += f"{key}) {value}\n"
-    text += "\nНапиши букву ответа (А, Б, В или Г):"
-    await update.callback_query.edit_message_text(text)
+        keyboard.append([InlineKeyboardButton(f"{key}) {value}", callback_data=f"ans_{key}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Если это первый вопрос, вызываем update.callback_query для ответа на кнопку "Прочитал"
+    # В этом месте мы можем отправить новое сообщение через query.message.reply_text или через update.effective_chat.send_message
+    if update.callback_query:
+        await update.callback_query.message.reply_text(text, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup)
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Проверяем, идёт ли сейчас квиз
-    if "question_index" not in context.user_data:
-        # Игнорируем сообщения, если квиз не активен
-        await update.message.reply_text("Чтобы начать квиз, нажми /start и прочитай статью, затем нажми кнопку.")
-        return
-
-    user_answer = update.message.text.strip().upper()
-    valid_keys = ["А", "Б", "В", "Г"]
-    if user_answer not in valid_keys:
-        await update.message.reply_text("Пожалуйста, ответь одной из букв: А, Б, В или Г.")
-        return
-
+async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_answer = query.data.split("_")[1]  # "ans_Б" -> "Б"
     idx = context.user_data.get("question_index", 0)
     if idx >= len(QUESTIONS):
         return
@@ -165,33 +158,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем ответ
     context.user_data["answers"][idx] = user_answer
 
-    # Проверяем правильность
+    # Проверяем
     correct = QUESTIONS[idx]["correct"]
     if user_answer == correct:
         reply = "✅ Верно!"
     else:
         reply = f"❌ Не совсем. Правильный ответ: {correct}"
 
-    # Увеличиваем индекс и отправляем следующий вопрос или завершаем
-    context.user_data["question_index"] = idx + 1
-    await update.message.reply_text(reply)
+    # Отправляем результат
+    await query.message.reply_text(reply)
 
+    # Переходим к следующему вопросу
+    context.user_data["question_index"] = idx + 1
     if context.user_data["question_index"] >= len(QUESTIONS):
         await finish_quiz(update, context)
     else:
-        await send_next_question(update, context)
-
-async def send_next_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    idx = context.user_data.get("question_index", 0)
-    if idx >= len(QUESTIONS):
-        await finish_quiz(update, context)
-        return
-    q = QUESTIONS[idx]
-    text = f"❓ Вопрос {idx+1} из {len(QUESTIONS)}:\n{q['question']}\n\n"
-    for key, value in q["options"].items():
-        text += f"{key}) {value}\n"
-    text += "\nНапиши букву ответа (А, Б, В или Г):"
-    await update.message.reply_text(text)
+        await send_question(update, context)
 
 async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Подсчёт баллов
@@ -230,9 +212,9 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Цена для участников квиза — 5 500 ₽ (вместо 10 000).\n"
         "Анкета ни к чему не обязывает."
     )
-    await update.message.reply_text(final_text)
+    await update.effective_chat.send_message(final_text)
 
-    # Очищаем состояние, чтобы не мешать
+    # Очищаем состояние
     context.user_data.clear()
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,8 +228,8 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^read_article$"))
+    app.add_handler(CallbackQueryHandler(answer_callback, pattern="^ans_"))
     logging.info("Бот запущен и слушает сообщения...")
     app.run_polling()
 
