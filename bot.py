@@ -9,16 +9,17 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 
-# --- Переменные окружения ---
+# --- Переменные окружения (читаем из Railway) ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
 
 PREORDER_URL = os.environ.get("PREORDER_URL", "https://ваша-ссылка-на-форму")
+COURSE_IMAGE_URL = os.environ.get("COURSE_IMAGE_URL")  # сюда вставляем ссылку на фото
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "Квиз-ответы")
 
-# --- Вопросы квиза ---
+# --- Вопросы квиза (финальные, с сокращёнными ответами) ---
 QUESTIONS = [
     {
         "question": "Для чего важно выбирать конкретную известную личность?",
@@ -199,15 +200,29 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         praise = "📖 Стоит перечитать статью внимательнее."
 
-    final_text = (
+    # Текст подписи к фото (без прямой ссылки в тексте)
+    caption = (
         f"{praise}\n\n"
         "Если хочешь системно вести блог с пониманием, сотрудничать с брендами и понимать, "
-        "какой формат контента для чего — оставь заявку на мини-курс <b>«OH MY BRAND»</b>:"
+        "какой формат контента для чего — оставь заявку на мини-курс <b>«OH MY BRAND»</b>.\n\n"
+        "Заполняй анкету презаписи, чтобы сохранить за собой цену — <b>5 500 ₽</b> (вместо 10 000).\n"
+        "Анкета ни к чему не обязывает."
     )
-    # Кнопка с ссылкой на предзапись
+
+    # Кнопка предзаписи
     keyboard = [[InlineKeyboardButton("📝 Предзапись на курс", url=PREORDER_URL)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.effective_chat.send_message(final_text, reply_markup=reply_markup, parse_mode='HTML')
+
+    # Отправляем фото, если переменная задана, иначе — только текст
+    if COURSE_IMAGE_URL:
+        await update.effective_chat.send_photo(
+            photo=COURSE_IMAGE_URL,
+            caption=caption,
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+    else:
+        await update.effective_chat.send_message(caption, reply_markup=reply_markup, parse_mode='HTML')
 
     context.user_data.clear()
 
