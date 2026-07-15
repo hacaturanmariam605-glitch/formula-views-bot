@@ -1,4 +1,4 @@
-import os
+ import os
 import json
 import logging
 import gspread
@@ -80,6 +80,7 @@ QUESTIONS = [
 # --- Сохранение в Google Sheets ---
 def save_to_google_sheets(user_data, answers, score):
     try:
+        logging.info("🧪 Начало сохранения в Google Sheets...")
         if not GOOGLE_CREDENTIALS_JSON:
             logging.warning("Google Sheets не настроен — пропускаем сохранение.")
             return
@@ -89,11 +90,14 @@ def save_to_google_sheets(user_data, answers, score):
         client = gspread.authorize(creds)
         try:
             sheet = client.open(GOOGLE_SHEET_NAME).sheet1
+            logging.info(f"Таблица '{GOOGLE_SHEET_NAME}' найдена.")
         except gspread.SpreadsheetNotFound:
             sheet = client.create(GOOGLE_SHEET_NAME).sheet1
+            logging.info(f"Таблица '{GOOGLE_SHEET_NAME}' создана.")
         if not sheet.get_all_records():
             headers = ["Дата", "User ID", "Имя", "Username", "Балл"] + [f"Вопрос {i+1}" for i in range(len(QUESTIONS))]
             sheet.append_row(headers)
+            logging.info("Добавлены заголовки.")
         from datetime import datetime
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -103,9 +107,9 @@ def save_to_google_sheets(user_data, answers, score):
             f"{score}/{len(QUESTIONS)}"
         ] + [answers.get(i, "") for i in range(len(QUESTIONS))]
         sheet.append_row(row)
-        logging.info("Данные сохранены в Google Sheets")
+        logging.info("✅ Данные сохранены в Google Sheets")
     except Exception as e:
-        logging.error(f"Ошибка при сохранении в Google Sheets: {e}")
+        logging.error(f"❌ Ошибка при сохранении в Google Sheets: {e}")
 
 # --- Обработчики ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -176,12 +180,14 @@ async def answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_question(update, context)
 
 async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info("🧪 finish_quiz вызвана, начинаем подсчёт...")
     answers = context.user_data.get("answers", {})
     score = 0
     for i, q in enumerate(QUESTIONS):
         if answers.get(i) == q["correct"]:
             score += 1
     total = len(QUESTIONS)
+    logging.info(f"🧪 Пользователь набрал {score}/{total}")
 
     user = update.effective_user
     user_data = {
@@ -191,7 +197,7 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_to_google_sheets(user_data, answers, score)
 
-    # --- Похвала с количеством правильных ответов (без звёздочек) ---
+    # --- Похвала с количеством правильных ответов ---
     if score == total:
         praise = f"🤍 {score}/{total} — Отличная работа, ты молодец! Ты идеально знаешь все 5 формул и готова применять их в своих роликах."
     elif score == total - 1:
@@ -222,6 +228,7 @@ async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_chat.send_message(caption, reply_markup=reply_markup, parse_mode='HTML')
 
     context.user_data.clear()
+    logging.info("🧪 finish_quiz завершена")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
